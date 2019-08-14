@@ -1,0 +1,25 @@
+body {
+  color: white;
+  background-color: #071729;
+  margin: 0;
+  font-family: Avenir-Heavy;
+}
+
+.DOP-Title-Container {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.DOP-Page-Title {
+  font-size: 60px;
+  font-family: Avenir-Heavy;
+}
+
+.DOP-h1 {
+  font-size: 60px;
+}
+
+.DOP-h3 {
+  font-size: 36px;
+ 
+}
