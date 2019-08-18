@@ -7,28 +7,40 @@ const PageContainer = styled.div`
 `;
 
 const InsertionContainer = styled.div`
-	display: flex;
-	justify-content: space-between;
-	flex-wrap: wrap;
-	margin-bottom: 20px;
+	display: grid;
+	grid-template-columns: repeat(auto-fit, 500px);
+	grid-column-gap: 30px;
+	justify-content: center;
 `;
 
 const InsertRoadContainer = styled.div`
+	width: 476px;
+	margin-bottom: 20px;
 	border-radius: 10px;
 	border-width: 2px;
 	border-color: #18A2B8;
 	border-style: solid;
 	padding: 10px;
-	width: 45vw;
 `;
 
 const InsertLocationContainer = styled.div`
+	width: 476px;
+	margin-bottom: 20px;
 	border-radius: 10px;
 	border-width: 2px;
 	border-color: #18A2B8;
 	border-style: solid;
 	padding: 10px;
-	width: 45vw;
+`;
+
+const InsertIntersectionContainer = styled.div`
+	width: 476px;
+	margin-bottom: 20px;
+	border-radius: 10px;
+	border-width: 2px;
+	border-color: #18A2B8;
+	border-style: solid;
+	padding: 10px;
 `;
 
 const InsertRoadForm = styled.form`
@@ -38,6 +50,12 @@ const InsertRoadForm = styled.form`
 `;
 
 const InsertLocationForm = styled.form`
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+`;
+
+const InsertIntersectionForm = styled.form`
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -115,11 +133,17 @@ class CreateMapPage extends Component {
 			currentLocationRoadName: null,
 			currentLocationRoadNameValid: false,
 			currentLocationName: null,
+			currentIntersectionX: null,
+			currentIntersectionY: null,
+			currentIntersectionCoordinatesValid: false,
+			currentIntersectionRoads: [""],
 			canvas: null,
 			context: null,
 			canvasScale: null,
 			roads: new Map(),
-			locations: new Map()
+			locations: new Map(),
+			graph_roadSectors: [],
+			graph_intersections: []
 		};
 		this.handleInsertRoadSubmit = this.handleInsertRoadSubmit.bind(this);
 		this.handleRoadInputChange = this.handleRoadInputChange.bind(this);
@@ -129,6 +153,8 @@ class CreateMapPage extends Component {
 		this.decreaseLocationCoordinate = this.decreaseLocationCoordinate.bind(this);
 		this.handleInsertLocationSubmit = this.handleInsertLocationSubmit.bind(this);
 		this.handleDeleteLocation = this.handleDeleteLocation.bind(this);
+		this.handleIntersectionInputChange = this.handleIntersectionInputChange.bind(this);
+		this.handleIntersectionRoadsInputChange = this.handleIntersectionRoadsInputChange.bind(this);
 	}
 
 	componentDidMount() {
@@ -169,6 +195,29 @@ class CreateMapPage extends Component {
 		}
 	}
 
+	getPointDistanceFromLine(lineStartX, lineStartY, lineEndX, lineEndY, pointX, pointY) {
+		const numerator = Math.abs(((lineEndX - lineStartX) * (lineStartY - pointY)) - ((lineStartX - pointX) * (lineEndY - lineStartY)));
+		const denominator = Math.sqrt(Math.pow((lineEndX - lineStartX), 2) + Math.pow((lineEndY - lineStartY), 2));
+		return (denominator === 0 ? 0 : numerator / denominator);
+	}
+
+	getNearbyRoads(x, y, maxDistance) {
+		let nearbyRoads = [];
+		this.state.roads.forEach(road => { 
+			const topLeftX = Math.min(road.startX, road.endX);
+			const topLeftY = Math.min(road.startY, road.endY);
+			const bottomRightX = Math.max(road.startX, road.endX)
+			const bottomRightY = Math.max(road.startY, road.endY);
+			if (x >= (topLeftX - maxDistance) && x <= (bottomRightX + maxDistance) 
+				&& y >= (topLeftY - maxDistance) && y <= bottomRightY + maxDistance) {
+				if (this.getPointDistanceFromLine(road.startX, road.startY, road.endX, road.endY, x, y) <= maxDistance) {
+					nearbyRoads.push(road.name);
+				}	
+			}
+		})
+		return nearbyRoads;
+	}
+
 	handleInsertRoadSubmit(event) {
 		event.preventDefault();
 		const { currentRoadStartX, currentRoadStartY, currentRoadEndX, currentRoadEndY, currentRoadName, currentRoadWeight,
@@ -195,6 +244,13 @@ class CreateMapPage extends Component {
 
 		// Clear the currently displayed inputs
 		this.clearRoadForm(false);
+
+		const roadSector = {roadName: newRoad.name, roadSectorId: "1", roadSectorLength: newRoad.weight, startX: newRoad.startX, 
+			startY: newRoad.startY, endX: newRoad.endX, endY: newRoad.endY};
+		this.state.graph_roadSectors.push(roadSector);
+		const startIntersection = {x: newRoad.startX, y: newRoad.startY, isEndpoint: true};
+		const endIntersection = {x: newRoad.endX, y: newRoad.endY, isEndpoint: true};
+		this.state.graph_intersections.push(startIntersection, endIntersection);
 	}
 
 	handleInsertLocationSubmit(event) {
@@ -217,7 +273,6 @@ class CreateMapPage extends Component {
 
 		// Clear the currently displayed inputs
 		this.clearLocationForm();
-
 	}
 
 	handleRoadInputChange(event) {
@@ -243,6 +298,26 @@ class CreateMapPage extends Component {
 			updatedStateObject["currentRoadWeight"] = null;
 		}
 		this.setState(updatedStateObject);
+	}
+
+	handleIntersectionInputChange(event) {
+		const updatedStateObject = {};
+		updatedStateObject[event.target.name] = event.target.value;
+		this.setState(updatedStateObject, () => {
+			const { currentIntersectionX, currentIntersectionY, canvas, canvasScale } = this.state;
+			if (this.coordinateInputsAreValid(currentIntersectionX, currentIntersectionY, canvas.width / canvasScale, 
+				canvas.height / canvasScale) && !this.inputsContainNull([currentIntersectionX, currentIntersectionY])) {
+				this.setState({currentIntersectionCoordinatesValid: true});
+				const nearbyRoads = this.getNearbyRoads(this.state.currentIntersectionX, this.state.currentIntersectionY, 10);
+				console.log(nearbyRoads);
+			} else {
+				this.setState({currentIntersectionCoordinatesValid: false});
+			}
+		});
+	}
+
+	handleIntersectionRoadsInputChange(event) {
+		
 	}
 
 	drawCanvas(canvas, context, roads, locations) {
@@ -274,7 +349,7 @@ class CreateMapPage extends Component {
 		})
 	}
 
-	drawLocations(canvas, context, locations) { // locations is [{x, y, name}]
+	drawLocations(canvas, context, locations) { // locations is [{x, y, name, roadname}]
 		locations.forEach(location => {
 			context.beginPath();
 			context.arc(location.x, location.y, 3, 0, 2 * Math.PI);
@@ -378,16 +453,9 @@ class CreateMapPage extends Component {
 		const currentRoad = this.state.roads.get(this.state.currentLocationRoadName);
 		const dx = currentRoad.endX - currentRoad.startX;
 		const dy = currentRoad.endY - currentRoad.startY;
-		const newX = this.state.currentLocationX + (dx / 100); // change the 1 to dx/100
+		const newX = this.state.currentLocationX + (dx / 100);
 		const newY = (dx !== 0) ? this.state.currentLocationY + ((dx / 100) * (dy / dx)) : this.state.currentLocationY + (dy / 100);
 
-		// let newLocation = {
-		// 	x: Number(newX),
-		// 	y: Number(newY),
-		// 	name: this.state.currentLocationRoadName
-		// };
-
-		// this.state.locations.set(this.state.currentLocationRoadName + "-" + this.state.currentLocationName, newLocation)
 		if ((currentRoad.endX - newX) >= Math.min(0, dx) && (currentRoad.endX - newX) <= Math.max(0, dx) && 
 			(currentRoad.endY - newY) >= Math.min(0, dy) && (currentRoad.endY - newY) <= Math.max(0, dy)) {
 			this.setState({currentLocationX: newX, currentLocationY: newY}, () => {
@@ -400,16 +468,9 @@ class CreateMapPage extends Component {
 		const currentRoad = this.state.roads.get(this.state.currentLocationRoadName);
 		const dx = currentRoad.endX - currentRoad.startX;
 		const dy = currentRoad.endY - currentRoad.startY;
-		const newX = this.state.currentLocationX - (dx / 100); // change the 1 to dx/100
+		const newX = this.state.currentLocationX - (dx / 100);
 		const newY = (dx !== 0) ? this.state.currentLocationY - ((dx / 100) * (dy / dx)) : this.state.currentLocationY - (dy / 100);
 
-		// let newLocation = {
-		// 	x: Number(newX),
-		// 	y: Number(newY),
-		// 	name: this.state.currentLocationRoadName
-		// };
-
-		// this.state.locations.set(this.state.currentLocationRoadName + "-" + this.state.currentLocationName, newLocation)
 		if ((currentRoad.endX - newX) >= Math.min(0, dx) && (currentRoad.endX - newX) <= Math.max(0, dx) && 
 			(currentRoad.endY - newY) >= Math.min(0, dy) && (currentRoad.endY - newY) <= Math.max(0, dy)) {
 			this.setState({currentLocationX: newX, currentLocationY: newY}, () => {
@@ -444,6 +505,53 @@ class CreateMapPage extends Component {
 		(<FormItem display={this.state.currentLocationRoadNameValid ? "" : "none"}>
 			<Button onClick={this.handleInsertLocationSubmit}>Insert Location</Button>
 		</FormItem>);
+
+		// const roadInputs = 
+		// (<FormInput 
+		// 	type="text" 
+		// 	boxWidth="200px" 
+		// 	name="currentIntersectionRoadName1" 
+		// 	onChange={this.handleIntersectionRoadsInputChange}>
+		// </FormInput>)
+
+		// const IntersectionRoadInputs = 
+		// (<FormItem style={{marginBottom:"10px"}} display={this.state.currentIntersectionCoordinatesValid ? "" : "none"}>
+		// 	{this.state.currentNumIntersectionRoads.map()}
+		// 	<FormInput 
+		// 		type="text" 
+		// 		boxWidth="200px" 
+		// 		name="currentIntersectionRoadName1" 
+		// 		onChange={this.handleIntersectionRoadsInputChange}>
+		// 	</FormInput>
+		// 	<svg height="34" width="34" onClick={this.deleteIntersectionRoad}>
+		// 		<line x1="10" y1="10" x2="24" y2="24" style={{stroke: "red", strokeWidth: 2}}></line>
+		// 		<line x1="24" y1="10" x2="10" y2="24" style={{stroke: "red", strokeWidth: 2}}></line>
+		// 	</svg>
+		// </FormItem>);
+
+		let roadCounter = 0;
+		const IntersectionRoadInputs = 
+		(<div>
+			{this.state.currentIntersectionRoads.map((road) => {
+				const roadName = `currentIntersectionRoadName${roadCounter}`;
+				roadCounter++;
+				return (
+				<FormItem key={roadName} style={{marginBottom:"10px"}} display={this.state.currentIntersectionCoordinatesValid ? "" : "none"}>
+					<FormInput 
+						type="text" 
+						boxWidth="200px" 
+						name={roadName}
+						onChange={this.handleIntersectionRoadsInputChange}
+						value={road}>
+					</FormInput>
+					<svg height="34" width="34" name={roadName} onClick={this.deleteIntersectionRoad}>
+						<line x1="10" y1="10" x2="24" y2="24" style={{stroke: "red", strokeWidth: 2}}></line>
+						<line x1="24" y1="10" x2="10" y2="24" style={{stroke: "red", strokeWidth: 2}}></line>
+			 		</svg>
+				</FormItem>);
+			})}
+
+		</div>);
 
 		return (
 			<PageContainer>
@@ -481,7 +589,7 @@ class CreateMapPage extends Component {
 					</InsertRoadContainer>
 					<InsertLocationContainer>
 						<InsertLocationForm>
-						<FormTitle>Insert Location</FormTitle>
+						<FormTitle>Insert/Edit Location</FormTitle>
 							<FormItem style={{marginBottom:"10px"}}>
 								<InputDescription>Road Name:</InputDescription>
 								<FormInput type="text" boxWidth="200px" name="currentLocationRoadName" onChange={this.handleLocationInputChange}></FormInput>
@@ -515,6 +623,25 @@ class CreateMapPage extends Component {
 						style={{marginTop:"6px", marginLeft:"6px"}}
 					/>
 				</MapContainer>
+				<InsertionContainer>
+					<InsertIntersectionContainer>
+						<InsertIntersectionForm>
+							<FormTitle>Insert/Edit Intersection</FormTitle>
+							<FormItem style={{marginBottom:"10px"}}>
+								<InputDescription>Coordinates (X,Y):</InputDescription>
+								<InputText>(</InputText>
+								<FormInput type="text" name="currentIntersectionX" onChange={this.handleIntersectionInputChange}></FormInput>
+								<InputText> , </InputText>
+								<FormInput type="text" name="currentIntersectionY" onChange={this.handleIntersectionInputChange}></FormInput>
+								<InputText>)</InputText>
+							</FormItem>
+							<FormItem style={{marginBottom:"10px"}} display={this.state.currentIntersectionCoordinatesValid ? "" : "none"}>
+								<InputDescription>Included Roads:</InputDescription>
+							</FormItem>
+							{IntersectionRoadInputs}
+						</InsertIntersectionForm>
+					</InsertIntersectionContainer>
+				</InsertionContainer>
 			</PageContainer>
 		);
 	}
