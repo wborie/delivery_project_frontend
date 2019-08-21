@@ -118,6 +118,15 @@ const MapContainer = styled.div`
 	margin-bottom: 20px;
 `;
 
+const AddRoadButton = styled.div`
+	background-color: transparent;
+	color: orange;
+	cursor: pointer;
+	:hover {
+		color: lime;
+	}
+`;
+
 class CreateMapPage extends Component {
 	constructor(props) {
 		super(props);
@@ -142,6 +151,7 @@ class CreateMapPage extends Component {
 			canvasScale: null,
 			roads: new Map(),
 			locations: new Map(),
+			intersections: new Map(),
 			graph_roadSectors: [],
 			graph_intersections: []
 		};
@@ -155,6 +165,10 @@ class CreateMapPage extends Component {
 		this.handleDeleteLocation = this.handleDeleteLocation.bind(this);
 		this.handleIntersectionInputChange = this.handleIntersectionInputChange.bind(this);
 		this.handleIntersectionRoadsInputChange = this.handleIntersectionRoadsInputChange.bind(this);
+		this.handleDeleteIntersectionRoad = this.handleDeleteIntersectionRoad.bind(this);
+		this.addIntersectionRoad = this.addIntersectionRoad.bind(this);
+		this.handleInsertIntersectionSubmit = this.handleInsertIntersectionSubmit.bind(this);
+		this.handleDeleteIntersection = this.handleDeleteIntersection.bind(this);
 	}
 
 	componentDidMount() {
@@ -178,46 +192,6 @@ class CreateMapPage extends Component {
 		this.setState({canvas: canvas, context: context, canvasScale: scale});
 	}
 
-	inputsContainNull(inputs) {
-		inputs.forEach(input => {
-			if (input === null) {
-				return true;
-			}
-		})
-		return false;
-	}
-
-	coordinateInputsAreValid(inputX, inputY, maximumX, maximumY) {
-		if (isNaN(inputX) || isNaN(inputY) || inputX > maximumX || inputY > maximumY || inputX <= 0 || inputY <= 0) {
-			return false;
-		} else {
-			return true;
-		}
-	}
-
-	getPointDistanceFromLine(lineStartX, lineStartY, lineEndX, lineEndY, pointX, pointY) {
-		const numerator = Math.abs(((lineEndX - lineStartX) * (lineStartY - pointY)) - ((lineStartX - pointX) * (lineEndY - lineStartY)));
-		const denominator = Math.sqrt(Math.pow((lineEndX - lineStartX), 2) + Math.pow((lineEndY - lineStartY), 2));
-		return (denominator === 0 ? 0 : numerator / denominator);
-	}
-
-	getNearbyRoads(x, y, maxDistance) {
-		let nearbyRoads = [];
-		this.state.roads.forEach(road => { 
-			const topLeftX = Math.min(road.startX, road.endX);
-			const topLeftY = Math.min(road.startY, road.endY);
-			const bottomRightX = Math.max(road.startX, road.endX)
-			const bottomRightY = Math.max(road.startY, road.endY);
-			if (x >= (topLeftX - maxDistance) && x <= (bottomRightX + maxDistance) 
-				&& y >= (topLeftY - maxDistance) && y <= bottomRightY + maxDistance) {
-				if (this.getPointDistanceFromLine(road.startX, road.startY, road.endX, road.endY, x, y) <= maxDistance) {
-					nearbyRoads.push(road.name);
-				}	
-			}
-		})
-		return nearbyRoads;
-	}
-
 	handleInsertRoadSubmit(event) {
 		event.preventDefault();
 		const { currentRoadStartX, currentRoadStartY, currentRoadEndX, currentRoadEndY, currentRoadName, currentRoadWeight,
@@ -239,12 +213,13 @@ class CreateMapPage extends Component {
 		this.state.roads.set(currentRoadName, newRoad);
 		this.setState({currentRoadStartX: null, currentRoadStartY: null, currentRoadEndX: null, currentRoadEndY: null, 
 			currentRoadName: null, currentRoadWeight: null}, () => {
-			this.drawCanvas(canvas, context, this.state.roads, this.state.locations)
+			this.drawCanvas(canvas, context, this.state.roads, this.state.locations, this.state.intersections);
 		});
 
 		// Clear the currently displayed inputs
 		this.clearRoadForm(false);
 
+		// Insert new information into graph output
 		const roadSector = {roadName: newRoad.name, roadSectorId: "1", roadSectorLength: newRoad.weight, startX: newRoad.startX, 
 			startY: newRoad.startY, endX: newRoad.endX, endY: newRoad.endY};
 		this.state.graph_roadSectors.push(roadSector);
@@ -268,11 +243,43 @@ class CreateMapPage extends Component {
 		this.state.locations.set(this.state.currentLocationRoadName + "-" + this.state.currentLocationName, newLocation)
 		this.setState({currentLocationX: -1, currentLocationY: -1, currentLocationName: null, currentLocationRoadName: null,
 			currentLocationRoadNameValid: false}, () => {
-			this.drawCanvas(this.state.canvas, this.state.context, this.state.roads, this.state.locations)
+			this.drawCanvas(this.state.canvas, this.state.context, this.state.roads, this.state.locations, this.state.intersections);
 		});
 
 		// Clear the currently displayed inputs
 		this.clearLocationForm();
+
+		// Insert new information into graph output TODO !!!!!
+	}
+
+	handleInsertIntersectionSubmit(event) {
+		event.preventDefault();
+		// Check if all of the provided roads exist
+		let roadsExist = true;
+		this.state.currentIntersectionRoads.forEach(road => {
+			if (!this.state.roads.has(road)) {
+				roadsExist = false;
+			}
+		})
+		if (!roadsExist) return;
+
+		const newIntersection = {
+			x: this.state.currentIntersectionX,
+			y: this.state.currentIntersectionY,
+			roads: this.state.currentIntersectionRoads,
+			isEndpoint: false
+		}
+
+		this.state.intersections.set(newIntersection.x + "-" + newIntersection.y, newIntersection);
+		this.setState({currentIntersectionX: null, currentIntersectionY: null, currentIntersectionCoordinatesValid: false,
+			currentIntersectionRoads: [""]}, () => {
+				this.drawCanvas(this.state.canvas, this.state.context, this.state.roads, this.state.locations, this.state.intersections);
+		});
+		document.getElementsByName("currentIntersectionX")[0].value = "";
+		document.getElementsByName("currentIntersectionY")[0].value = "";
+
+		// Insert new information into graph output TODO !!!!!
+
 	}
 
 	handleRoadInputChange(event) {
@@ -308,8 +315,10 @@ class CreateMapPage extends Component {
 			if (this.coordinateInputsAreValid(currentIntersectionX, currentIntersectionY, canvas.width / canvasScale, 
 				canvas.height / canvasScale) && !this.inputsContainNull([currentIntersectionX, currentIntersectionY])) {
 				this.setState({currentIntersectionCoordinatesValid: true});
+
 				const nearbyRoads = this.getNearbyRoads(this.state.currentIntersectionX, this.state.currentIntersectionY, 10);
-				console.log(nearbyRoads);
+				const newIntersectionRoads = (nearbyRoads.length === 0) ? [""] : nearbyRoads;
+				this.setState({currentIntersectionRoads: newIntersectionRoads});
 			} else {
 				this.setState({currentIntersectionCoordinatesValid: false});
 			}
@@ -317,45 +326,10 @@ class CreateMapPage extends Component {
 	}
 
 	handleIntersectionRoadsInputChange(event) {
-		
-	}
-
-	drawCanvas(canvas, context, roads, locations) {
-		context.clearRect(0, 0, canvas.width, canvas.height);
-		this.drawRoads(canvas, context, roads);
-		this.drawLocations(canvas, context, locations)
-	}
-
-	drawRoads(canvas, context, roads) { // roads is [{startX: x, startY: y, endX: x, endY: y, name: z, weight: w, editing: true/false}]
-		roads.forEach(road => {
-			// Draw the road
-			context.lineWidth = 2;
-			context.strokeStyle = "white";
-			context.beginPath(); // Must have this line so previous paths are not redrawn
-			context.moveTo(road.startX, road.startY);
-			context.lineTo(road.endX, road.endY);
-			context.stroke();
-			// Draw the road label
-			context.textAlign = "center";
-			context.fillStyle = "white";
-			context.font = "20px Avenir";
-			const dx = road.endX - road.startX;
-			const dy = road.endY - road.startY;
-			context.save();
-			context.translate(road.startX + (dx * 0.5), road.startY + (dy * 0.5));
-			context.rotate(Math.atan2(dy, dx));
-			context.fillText(road.name + " (" + road.weight + ")", 0, 0);
-			context.restore();
-		})
-	}
-
-	drawLocations(canvas, context, locations) { // locations is [{x, y, name, roadname}]
-		locations.forEach(location => {
-			context.beginPath();
-			context.arc(location.x, location.y, 3, 0, 2 * Math.PI);
-			context.fill();
-			context.stroke();
-		})
+		event.preventDefault();
+		const currentIntersectionRoads = this.state.currentIntersectionRoads.slice();
+		currentIntersectionRoads[Number.parseInt(event.target.name[event.target.name.length - 1])] = event.target.value;
+		this.setState({currentIntersectionRoads: currentIntersectionRoads});
 	}
 
 	handleDeleteRoad(event) {
@@ -366,9 +340,14 @@ class CreateMapPage extends Component {
 				this.state.locations.delete(key);
 			}
 		})
+		this.state.intersections.forEach(intersection => {
+			if (intersection.roads.includes(this.state.currentRoadName)) {
+				intersection.roads.splice(intersection.roads.indexOf(this.state.currentRoadName), 1);
+			}
+		})
 		this.setState({currentRoadStartX: null, currentRoadStartY: null, currentRoadEndX: null, currentRoadEndY: null, 
 			currentRoadName: null, currentRoadWeight: null}, () => {
-			this.drawCanvas(this.state.canvas, this.state.context, this.state.roads, this.state.locations);
+			this.drawCanvas(this.state.canvas, this.state.context, this.state.roads, this.state.locations, this.state.intersections);
 		});
 		// Clear the currently displayed inputs
 		this.clearRoadForm(false);
@@ -379,33 +358,34 @@ class CreateMapPage extends Component {
 		this.state.locations.delete(this.state.currentLocationRoadName + "-" + this.state.currentLocationName);
 		this.setState({currentLocationX: -1, currentLocationY: -1, currentLocationName: null, currentLocationRoadName: null,
 			currentLocationRoadNameValid: false}, () => {
-			this.drawCanvas(this.state.canvas, this.state.context, this.state.roads, this.state.locations);
+			this.drawCanvas(this.state.canvas, this.state.context, this.state.roads, this.state.locations, this.state.intersections);
 		});
 		// Clear the currently displayed inputs
 		this.clearLocationForm();
 	}
 
-	setRoadForm(startX, startY, endX, endY, name, weight) {
-		document.getElementsByName("currentRoadStartX")[0].value = startX;
-		document.getElementsByName("currentRoadStartY")[0].value = startY;
-		document.getElementsByName("currentRoadEndX")[0].value = endX;
-		document.getElementsByName("currentRoadEndY")[0].value = endY;
-		document.getElementsByName("currentRoadName")[0].value = name;
-		document.getElementsByName("currentRoadWeight")[0].value = weight;
+	handleDeleteIntersectionRoad(event) {
+		event.preventDefault(); // ID is the only target identifier that works for some reason (name doesn't work)
+		const currentIntersectionRoadIndex = Number.parseInt(event.target.id[event.target.id.length - 1]);
+		const currentIntersectionRoads = this.state.currentIntersectionRoads.slice();
+		currentIntersectionRoads.splice(currentIntersectionRoadIndex, 1);
+		this.setState({currentIntersectionRoads: currentIntersectionRoads});
 	}
 
-	clearRoadForm(skipName) {
-		document.getElementsByName("currentRoadStartX")[0].value = "";
-		document.getElementsByName("currentRoadStartY")[0].value = "";
-		document.getElementsByName("currentRoadEndX")[0].value = "";
-		document.getElementsByName("currentRoadEndY")[0].value = "";
-		if (!skipName) document.getElementsByName("currentRoadName")[0].value = "";
-		document.getElementsByName("currentRoadWeight")[0].value = "";
+	handleDeleteIntersection(event) {
+		event.preventDefault();
+		this.state.intersections.delete(this.state.currentIntersectionX + "-" + this.state.currentIntersectionY);
+		this.setState({currentIntersectionX: null, currentIntersectionY: null, currentIntersectionCoordinatesValid: false,
+			currentIntersectionRoads: [""]}, () => {
+				this.drawCanvas(this.state.canvas, this.state.context, this.state.roads, this.state.locations, this.state.intersections);
+		});
+		document.getElementsByName("currentIntersectionX")[0].value = "";
+		document.getElementsByName("currentIntersectionY")[0].value = "";
 	}
 
-	clearLocationForm() {
-		document.getElementsByName("currentLocationName")[0].value = "";
-		document.getElementsByName("currentLocationRoadName")[0].value = "";
+	addIntersectionRoad(event) {
+		const currentIntersectionRoads = this.state.currentIntersectionRoads.concat([""]);
+		this.setState({currentIntersectionRoads: currentIntersectionRoads});
 	}
 
 	handleLocationInputChange(event) {
@@ -459,7 +439,7 @@ class CreateMapPage extends Component {
 		if ((currentRoad.endX - newX) >= Math.min(0, dx) && (currentRoad.endX - newX) <= Math.max(0, dx) && 
 			(currentRoad.endY - newY) >= Math.min(0, dy) && (currentRoad.endY - newY) <= Math.max(0, dy)) {
 			this.setState({currentLocationX: newX, currentLocationY: newY}, () => {
-				this.drawCanvas(this.state.canvas, this.state.context, this.state.roads, this.state.locations)
+				this.drawCanvas(this.state.canvas, this.state.context, this.state.roads, this.state.locations, this.state.intersections)
 			});
 		}
 	}
@@ -474,9 +454,91 @@ class CreateMapPage extends Component {
 		if ((currentRoad.endX - newX) >= Math.min(0, dx) && (currentRoad.endX - newX) <= Math.max(0, dx) && 
 			(currentRoad.endY - newY) >= Math.min(0, dy) && (currentRoad.endY - newY) <= Math.max(0, dy)) {
 			this.setState({currentLocationX: newX, currentLocationY: newY}, () => {
-				this.drawCanvas(this.state.canvas, this.state.context, this.state.roads, this.state.locations)
+				this.drawCanvas(this.state.canvas, this.state.context, this.state.roads, this.state.locations, this.state.intersections)
 			});
 		}
+	}
+
+	drawCanvas(canvas, context, roads, locations, intersections) {
+		context.clearRect(0, 0, canvas.width, canvas.height);
+		this.drawRoads(canvas, context, roads);
+		this.drawLocations(canvas, context, locations);
+		this.drawIntersections(canvas, context, intersections);
+	}
+
+	drawRoads(canvas, context, roads) { // roads is [{startX: x, startY: y, endX: x, endY: y, name: z, weight: w, editing: true/false}]
+		roads.forEach(road => {
+			// Draw the road
+			context.lineWidth = 2;
+			context.strokeStyle = "white";
+			context.beginPath(); // Must have this line so previous paths are not redrawn
+			context.moveTo(road.startX, road.startY);
+			context.lineTo(road.endX, road.endY);
+			context.stroke();
+			// Draw the road label
+			context.textAlign = "center";
+			context.fillStyle = "white";
+			context.font = "20px Avenir";
+			const dx = road.endX - road.startX;
+			const dy = road.endY - road.startY;
+			context.save();
+			context.translate(road.startX + (dx * 0.5), road.startY + (dy * 0.5));
+			context.rotate(Math.atan2(dy, dx));
+			context.fillText(road.name + " (" + road.weight + ")", 0, 0);
+			context.restore();
+		})
+	}
+
+	drawLocations(canvas, context, locations) { // locations is [{x, y, name, roadname}]
+		locations.forEach(location => {
+			context.beginPath();
+			context.arc(location.x, location.y, 3, 0, 2 * Math.PI);
+			context.fill();
+			context.stroke();
+		})
+	}
+
+	drawIntersections(canvas, context, intersections) { // intersections is [{x, y, roads, isEndpoint}]
+		intersections.forEach(intersection => {
+			if (!intersection.isEndpoint) {
+				intersection.roads.forEach(road => {
+					const INTERSECTION_LENGTH = 5; // amount of pixels for half of intersection line
+					const currentRoad = this.state.roads.get(road);
+					const leftX = (Math.min(currentRoad.startX, currentRoad.endX) === currentRoad.startX) ? 
+						currentRoad.startX : currentRoad.endX;
+					const leftY = (leftX === currentRoad.startX) ? currentRoad.startY : currentRoad.endY;
+
+					const rightX = (leftX === currentRoad.startX) ? currentRoad.endX : currentRoad.startX;
+					const rightY = (leftX === currentRoad.startX) ? currentRoad.endY : currentRoad.startY;
+
+					const dxLeft = Number(intersection.x) - leftX;
+					const dyLeft = Number(intersection.y) - leftY;
+					const dxRight = rightX - Number(intersection.x);
+					const dyRight = rightY - Number(intersection.y);
+
+					const roadLengthLeft = Math.sqrt(Math.pow(dxLeft, 2) + Math.pow(dyLeft, 2));
+					const intersectionLengthLeft = roadLengthLeft < INTERSECTION_LENGTH ? roadLengthLeft : INTERSECTION_LENGTH;
+					const distanceRatioLeft = (roadLengthLeft === 0) ? 0 : intersectionLengthLeft / roadLengthLeft;
+					const newLineLeftX = Number(intersection.x) - (distanceRatioLeft * dxLeft);
+					const newLineLeftY = Number(intersection.y) - (distanceRatioLeft * dyLeft);
+
+					const roadLengthRight = Math.sqrt(Math.pow(dxRight, 2) + Math.pow(dyRight, 2));
+					const intersectionLengthRight = roadLengthRight < INTERSECTION_LENGTH ? roadLengthRight : INTERSECTION_LENGTH;
+					const distanceRatioRight = (roadLengthRight === 0) ? 0 : intersectionLengthRight / roadLengthRight;
+					const newLineRightX = Number(intersection.x) + (distanceRatioRight * dxRight);
+					const newLineRightY = Number(intersection.y) + (distanceRatioRight * dyRight);
+					// console.log(leftX, leftY, rightX, rightY);
+					// console.log(dxLeft, dyLeft, dxRight, dyRight);
+					// console.log(newLineLeftX, newLineLeftY, newLineRightX, newLineRightY);
+					context.lineWidth = 2;
+					context.strokeStyle = "green";
+					context.beginPath();
+					context.moveTo(newLineLeftX, newLineLeftY);
+					context.lineTo(newLineRightX, newLineRightY);
+					context.stroke();
+				})
+			}
+		})
 	}
 
 	render() {
@@ -506,37 +568,13 @@ class CreateMapPage extends Component {
 			<Button onClick={this.handleInsertLocationSubmit}>Insert Location</Button>
 		</FormItem>);
 
-		// const roadInputs = 
-		// (<FormInput 
-		// 	type="text" 
-		// 	boxWidth="200px" 
-		// 	name="currentIntersectionRoadName1" 
-		// 	onChange={this.handleIntersectionRoadsInputChange}>
-		// </FormInput>)
-
-		// const IntersectionRoadInputs = 
-		// (<FormItem style={{marginBottom:"10px"}} display={this.state.currentIntersectionCoordinatesValid ? "" : "none"}>
-		// 	{this.state.currentNumIntersectionRoads.map()}
-		// 	<FormInput 
-		// 		type="text" 
-		// 		boxWidth="200px" 
-		// 		name="currentIntersectionRoadName1" 
-		// 		onChange={this.handleIntersectionRoadsInputChange}>
-		// 	</FormInput>
-		// 	<svg height="34" width="34" onClick={this.deleteIntersectionRoad}>
-		// 		<line x1="10" y1="10" x2="24" y2="24" style={{stroke: "red", strokeWidth: 2}}></line>
-		// 		<line x1="24" y1="10" x2="10" y2="24" style={{stroke: "red", strokeWidth: 2}}></line>
-		// 	</svg>
-		// </FormItem>);
-
-		let roadCounter = 0;
 		const IntersectionRoadInputs = 
 		(<div>
-			{this.state.currentIntersectionRoads.map((road) => {
-				const roadName = `currentIntersectionRoadName${roadCounter}`;
-				roadCounter++;
+			{this.state.currentIntersectionRoads.map((road, index) => {
+				const roadName = `currentIntersectionRoadName${index}`;
 				return (
 				<FormItem key={roadName} style={{marginBottom:"10px"}} display={this.state.currentIntersectionCoordinatesValid ? "" : "none"}>
+					<div style={(this.state.currentIntersectionRoads.length > 1)? {width: "34px", height: "34px"} : {}}></div>
 					<FormInput 
 						type="text" 
 						boxWidth="200px" 
@@ -544,14 +582,31 @@ class CreateMapPage extends Component {
 						onChange={this.handleIntersectionRoadsInputChange}
 						value={road}>
 					</FormInput>
-					<svg height="34" width="34" name={roadName} onClick={this.deleteIntersectionRoad}>
-						<line x1="10" y1="10" x2="24" y2="24" style={{stroke: "red", strokeWidth: 2}}></line>
-						<line x1="24" y1="10" x2="10" y2="24" style={{stroke: "red", strokeWidth: 2}}></line>
-			 		</svg>
+					{index !== 0 ? 
+					<svg height="34" width="34" id={`deleteButton1-${index}`} onClick={this.handleDeleteIntersectionRoad}>
+						<line x1="10" y1="10" x2="24" y2="24" id={`deleteButton2-${index}`} style={{stroke: "red", strokeWidth: 2}}></line>
+						<line x1="24" y1="10" x2="10" y2="24"  id={`deleteButton3-${index}`}style={{stroke: "red", strokeWidth: 2}}></line>
+					 </svg> : <div style={{display:"none"}} />
+					}
 				</FormItem>);
 			})}
-
 		</div>);
+
+	const intersectionBeingEdited = this.state.intersections.has(this.state.currentIntersectionX + "-" + this.state.currentIntersectionY);
+	const IntersectionFormButtons = intersectionBeingEdited ? 
+	(<FormItem display={this.state.currentIntersectionCoordinatesValid ? "" : "none"}>
+		<Button onClick={this.handleInsertIntersectionSubmit} style={{marginRight:"10px"}}>
+			Edit Intersection
+		</Button>
+		<Button onClick={this.handleDeleteIntersection}>
+			Delete Intersection
+		</Button>
+	</FormItem>) :
+	(<FormItem display={this.state.currentIntersectionCoordinatesValid ? "" : "none"}>
+		<Button onClick={this.handleInsertIntersectionSubmit}>
+			Insert Intersection
+		</Button>
+	</FormItem>);
 
 		return (
 			<PageContainer>
@@ -639,12 +694,78 @@ class CreateMapPage extends Component {
 								<InputDescription>Included Roads:</InputDescription>
 							</FormItem>
 							{IntersectionRoadInputs}
+							<FormItem style={{marginBottom:"10px"}} display={this.state.currentIntersectionCoordinatesValid ? "" : "none"}>
+								<AddRoadButton onClick={this.addIntersectionRoad}>Add a road +</AddRoadButton>
+							</FormItem>
+							{IntersectionFormButtons}
 						</InsertIntersectionForm>
 					</InsertIntersectionContainer>
 				</InsertionContainer>
 			</PageContainer>
 		);
 	}
-}
 
+	setRoadForm(startX, startY, endX, endY, name, weight) {
+		document.getElementsByName("currentRoadStartX")[0].value = startX;
+		document.getElementsByName("currentRoadStartY")[0].value = startY;
+		document.getElementsByName("currentRoadEndX")[0].value = endX;
+		document.getElementsByName("currentRoadEndY")[0].value = endY;
+		document.getElementsByName("currentRoadName")[0].value = name;
+		document.getElementsByName("currentRoadWeight")[0].value = weight;
+	}
+
+	clearRoadForm(skipName) {
+		document.getElementsByName("currentRoadStartX")[0].value = "";
+		document.getElementsByName("currentRoadStartY")[0].value = "";
+		document.getElementsByName("currentRoadEndX")[0].value = "";
+		document.getElementsByName("currentRoadEndY")[0].value = "";
+		if (!skipName) document.getElementsByName("currentRoadName")[0].value = "";
+		document.getElementsByName("currentRoadWeight")[0].value = "";
+	}
+
+	clearLocationForm() {
+		document.getElementsByName("currentLocationName")[0].value = "";
+		document.getElementsByName("currentLocationRoadName")[0].value = "";
+	}
+
+	inputsContainNull(inputs) {
+		inputs.forEach(input => {
+			if (input === null) {
+				return true;
+			}
+		})
+		return false;
+	}
+
+	coordinateInputsAreValid(inputX, inputY, maximumX, maximumY) {
+		if (isNaN(inputX) || isNaN(inputY) || inputX > maximumX || inputY > maximumY || inputX <= 0 || inputY <= 0) {
+			return false;
+		} else {
+			return true;
+		}
+	}
+
+	getPointDistanceFromLine(lineStartX, lineStartY, lineEndX, lineEndY, pointX, pointY) {
+		const numerator = Math.abs(((lineEndX - lineStartX) * (lineStartY - pointY)) - ((lineStartX - pointX) * (lineEndY - lineStartY)));
+		const denominator = Math.sqrt(Math.pow((lineEndX - lineStartX), 2) + Math.pow((lineEndY - lineStartY), 2));
+		return (denominator === 0 ? 0 : numerator / denominator);
+	}
+
+	getNearbyRoads(x, y, maxDistance) {
+		let nearbyRoads = [];
+		this.state.roads.forEach(road => { 
+			const topLeftX = Math.min(road.startX, road.endX);
+			const topLeftY = Math.min(road.startY, road.endY);
+			const bottomRightX = Math.max(road.startX, road.endX)
+			const bottomRightY = Math.max(road.startY, road.endY);
+			if (x >= (topLeftX - maxDistance) && x <= (bottomRightX + maxDistance) 
+				&& y >= (topLeftY - maxDistance) && y <= bottomRightY + maxDistance) {
+				if (this.getPointDistanceFromLine(road.startX, road.startY, road.endX, road.endY, x, y) <= maxDistance) {
+					nearbyRoads.push(road.name);
+				}	
+			}
+		})
+		return nearbyRoads;
+	}
+}
 export default CreateMapPage;
