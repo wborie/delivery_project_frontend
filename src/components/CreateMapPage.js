@@ -700,6 +700,11 @@ class CreateMapPage extends Component {
 							{IntersectionFormButtons}
 						</InsertIntersectionForm>
 					</InsertIntersectionContainer>
+					<InsertIntersectionContainer>
+						<InsertIntersectionForm>
+							<FormTitle>Submit Map</FormTitle>
+						</InsertIntersectionForm>
+					</InsertIntersectionContainer>
 				</InsertionContainer>
 			</PageContainer>
 		);
