@@ -154,7 +154,7 @@ class CreateMapPage extends Component {
       intersections: new Map(),
       graph_roadSectors: [],
       graph_intersections: [],
-      graph_roadSectorCounters: 
+      graph_roadSectorCounters: new Map()
     };
     this.handleInsertRoadSubmit = this.handleInsertRoadSubmit.bind(this);
     this.handleRoadInputChange = this.handleRoadInputChange.bind(this);
@@ -227,7 +227,8 @@ class CreateMapPage extends Component {
       roadName: newRoad.name, roadSectorId: "1", roadSectorLength: newRoad.weight, startX: newRoad.startX,
       startY: newRoad.startY, endX: newRoad.endX, endY: newRoad.endY
     };
-    this.state.graph_roadSectors.push(roadSector);
+		this.state.graph_roadSectors.push(roadSector);
+		this.state.graph_roadSectorCounters.set(roadSector.roadName, 1);
     const startIntersection = { x: newRoad.startX, y: newRoad.startY, isEndpoint: true, roadSectors: [roadSector] };
     const endIntersection = { x: newRoad.endX, y: newRoad.endY, isEndpoint: true, roadSectors: [roadSector] };
     this.state.graph_intersections.push(startIntersection, endIntersection);
@@ -299,10 +300,46 @@ class CreateMapPage extends Component {
           roadSectorIndex = index;
         }
       })
-      const oldRoadSector = this.state.graph_roadSectors.splice(roadSectorIndex, 1);
-      console.log(oldRoadSector)
+			const oldRoadSector = this.state.graph_roadSectors.splice(roadSectorIndex, 1)[0];
+			const splitRoadSectors = this.splitRoadSector(newIntersection, oldRoadSector);
+			const newLeftRoadSector = splitRoadSectors[0];
+			const newRightRoadSector = splitRoadSectors[1];
+			this.state.graph_roadSectorCounters.set(oldRoadSector.roadName, String(parseInt(oldRoadSector.roadSectorId, 10) + 2));
+      console.log(oldRoadSector, newLeftRoadSector, newRightRoadSector);
     })
-  }
+	}
+	
+	splitRoadSector(newIntersection, oldRoadSector) { // leftRoadSector returned as arr[0], right as arry[1]
+		console.log(newIntersection, oldRoadSector);
+		const newLeftRoadSectorStartX = Math.min(oldRoadSector.startX, oldRoadSector.endX);
+		const newLeftRoadSectorStartY = (newLeftRoadSectorStartX === oldRoadSector.startX) ? oldRoadSector.startY : oldRoadSector.endY;
+
+		const newLeftRoadSectorEndX = Number(newIntersection.x);
+		const newLeftRoadSectorEndY = Number(newIntersection.y);
+
+		const newRightRoadSectorStartY = Number(newIntersection.y);
+		const newRightRoadSectorStartX = Number(newIntersection.x);
+
+		const newRightRoadSectorEndX = Math.max(oldRoadSector.startX, oldRoadSector.endX);
+		const newRightRoadSectorEndY = (newRightRoadSectorEndX === oldRoadSector.startX) ? oldRoadSector.startY : oldRoadSector.endY;
+
+		const newLeftRoadSectorLength = Math.sqrt(Math.pow(newLeftRoadSectorEndX - newLeftRoadSectorStartX, 2) + 
+			Math.pow(newLeftRoadSectorEndY - newLeftRoadSectorStartY, 2)); // TODO: not this, it's oldRoadSector.roadSectorLength ratio
+		const newRightRoadSectorLength = Math.sqrt(Math.pow(newRightRoadSectorEndX - newRightRoadSectorStartX, 2) + 
+			Math.pow(newRightRoadSectorEndY - newRightRoadSectorStartY, 2));
+
+		const newLeftRoadSector = {roadName: oldRoadSector.roadName, 
+			roadSectorId: String(parseInt(oldRoadSector.roadSectorId, 10) + 1), startX: newLeftRoadSectorStartX, 
+			startY: newLeftRoadSectorStartY, endX: newLeftRoadSectorEndX, endY: newLeftRoadSectorEndY, 
+			roadSectorLength: newLeftRoadSectorLength};
+
+		const newRightRoadSector = {roadName: oldRoadSector.roadName, 
+			roadSectorId: String(parseInt(oldRoadSector.roadSectorId, 10) + 2), startX: newRightRoadSectorStartX, 
+			startY: newRightRoadSectorStartY, endX: newRightRoadSectorEndX, endY: newRightRoadSectorEndY,
+			roadSectorLength: newRightRoadSectorLength};
+
+		return [newLeftRoadSector, newRightRoadSector];
+	}
 
   handleRoadInputChange(event) {
     const updatedStateObject = {};
