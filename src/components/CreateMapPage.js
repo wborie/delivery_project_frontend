@@ -323,9 +323,23 @@ class CreateMapPage extends Component {
       })
     })
 
-    // If this intersection doesn't already exist, then add it to graph_intersections TODO: if part
+    // If this intersection already exists, remove it before replacing it.
+    let intersectionIndices = [];
+    for(let i = 0; i < this.state.graph_intersections.length; i++) {
+      const intersection = this.state.graph_intersections[i];
+      if (intersection.x === Number(newIntersection.x) && intersection.y === Number(newIntersection.y)) {
+        intersectionIndices.push(i);
+      }
+    }
+    
+    for(let i = intersectionIndices.length - 1; i >= 0; i--) {
+      this.state.graph_intersections.splice(intersectionIndices[i], 1);
+    }
+
+    // Add this intersection to graph_intersections
     this.state.graph_intersections.push( {x: Number(newIntersection.x), y: Number(newIntersection.y), 
-      isEndpoint: false, roadSectors: newIntersectionRoadSectors})
+      isEndpoint: false, roadSectors: newIntersectionRoadSectors});
+      
     console.log(this.state.graph_roadSectors)
     console.log(this.state.graph_intersections)
 	}
