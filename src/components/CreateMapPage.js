@@ -288,39 +288,53 @@ class CreateMapPage extends Component {
     document.getElementsByName("currentIntersectionX")[0].value = "";
     document.getElementsByName("currentIntersectionY")[0].value = "";
 
-    // if editing an intersection, shouldn't split roads that have already been split (difference between current intersection roads and newIntersection roads)
-
+    // For each road part of the intersection, identify the roadSector of that road which is impacted (roadSectorIndex)
+    // Then split that roadSector in half (unless the intersection is an endpoint of the roadSector).
     const newIntersectionRoadSectors = [];
     newIntersection.roads.forEach(road => {
       let roadSectorIndex = -1;
       this.state.graph_roadSectors.forEach((roadSector, index) => {
-        if (roadSector.roadName === road && this.pointBetweenRoadSector(Number(newIntersection.x), Number(newIntersection.y), roadSector.startX, roadSector.startY,
-          roadSector.endX, roadSector.endY)) {
-          // this is the roadSector on the current road to be split <-- remove current roadSector
-          roadSectorIndex = index;
+        if (roadSector.roadName === road && this.pointBetweenRoadSector(Number(newIntersection.x), Number(newIntersection.y), 
+          roadSector.startX, roadSector.startY, roadSector.endX, roadSector.endY)) {
+          roadSectorIndex = index; // This is the index of the impacted roadSector on the current road.
         }
       })
-			const oldRoadSector = this.state.graph_roadSectors.splice(roadSectorIndex, 1)[0]; // Removes this roadSector and returns it
-			const splitRoadSectors = this.splitRoadSector(newIntersection, oldRoadSector);
-			const newLeftRoadSector = splitRoadSectors[0];
-			const newRightRoadSector = splitRoadSectors[1];
-			this.state.graph_roadSectorCounters.set(oldRoadSector.roadName, String(parseInt(oldRoadSector.roadSectorId, 10) + 2));
-      this.state.graph_roadSectors.push(newLeftRoadSector, newRightRoadSector);
-      newIntersectionRoadSectors.push(newLeftRoadSector, newRightRoadSector);
 
-      // Update each intersection in graph_intersections to replace old road sectors with new road Sectors
-      this.state.graph_intersections.forEach(intersection => {
-        intersection.roadSectors.forEach((intersectionRoadSector, index) => {
-          if (intersectionRoadSector.roadName === oldRoadSector.roadName && 
-            intersectionRoadSector.roadSectorId === oldRoadSector.roadSectorId) {
-            if (intersection.x <= newIntersection.x) { // This roadSector is to the left of the new intersection
-              intersection.roadSectors.splice(index, 1, newLeftRoadSector);
-            } else {  // This roadSector is to the right of the new intersection
-              intersection.roadSectors.splice(index, 1, newRightRoadSector);
+      // Check whether or not the roadSector should be split (yes by default, no if the intersection is an endpoint of
+      // the roadSector)
+      let roadSectorShouldBeSplit = true;
+      const currentRoadSector = this.state.graph_roadSectors[roadSectorIndex];
+      if ((Number(newIntersection.x) === currentRoadSector.startX && Number(newIntersection.y) === currentRoadSector.startY) ||
+        (Number(newIntersection.x) === currentRoadSector.endX && Number(newIntersection.y) === currentRoadSector.endY)) {
+        // The intersection is an endpoint of this roadSector
+        roadSectorShouldBeSplit = false;
+        newIntersectionRoadSectors.push(currentRoadSector);
+      }
+      
+      if (roadSectorShouldBeSplit) {
+        // Remove the impacted roadSector and replace it with a left half and a right half
+        const oldRoadSector = this.state.graph_roadSectors.splice(roadSectorIndex, 1)[0]; // Removes this roadSector and returns it
+        const splitRoadSectors = this.splitRoadSector(newIntersection, oldRoadSector);
+        const newLeftRoadSector = splitRoadSectors[0];
+        const newRightRoadSector = splitRoadSectors[1];
+        this.state.graph_roadSectorCounters.set(oldRoadSector.roadName, String(parseInt(oldRoadSector.roadSectorId, 10) + 2));
+        this.state.graph_roadSectors.push(newLeftRoadSector, newRightRoadSector);
+        newIntersectionRoadSectors.push(newLeftRoadSector, newRightRoadSector);
+
+        // Update each intersection in graph_intersections to replace the impacted roadSector with the new left and right halves
+        this.state.graph_intersections.forEach(intersection => {
+          intersection.roadSectors.forEach((intersectionRoadSector, index) => {
+            if (intersectionRoadSector.roadName === oldRoadSector.roadName && 
+              intersectionRoadSector.roadSectorId === oldRoadSector.roadSectorId) {
+              if (intersection.x <= Number(newIntersection.x)) { // This roadSector is to the left of the new intersection
+                intersection.roadSectors.splice(index, 1, newLeftRoadSector);
+              } else {  // This roadSector is to the right of the new intersection
+                intersection.roadSectors.splice(index, 1, newRightRoadSector);
+              }
             }
-          }
+          })
         })
-      })
+      }
     })
 
     // If this intersection already exists, remove it before replacing it.
@@ -339,9 +353,9 @@ class CreateMapPage extends Component {
     // Add this intersection to graph_intersections
     this.state.graph_intersections.push( {x: Number(newIntersection.x), y: Number(newIntersection.y), 
       isEndpoint: false, roadSectors: newIntersectionRoadSectors});
-      
-    console.log(this.state.graph_roadSectors)
-    console.log(this.state.graph_intersections)
+
+    console.log(this.state.graph_roadSectors);
+    console.log(this.state.graph_intersections);
 	}
 
   handleRoadInputChange(event) {
@@ -816,7 +830,7 @@ class CreateMapPage extends Component {
 
     const minY = Math.min(roadStartY, roadEndY);
     const maxY = Math.max(roadStartY, roadEndY);
-    return (pointX > minX && pointX < maxX && pointY > minY && pointY < maxY);
+    return (pointX >= minX && pointX <= maxX && pointY >= minY && pointY <= maxY);
   }
 
   coordinateInputsAreValid(inputX, inputY, maximumX, maximumY) {
