@@ -154,7 +154,8 @@ class CreateMapPage extends Component {
       intersections: new Map(),
       graph_roadSectors: [],
       graph_intersections: [],
-      graph_roadSectorCounters: new Map()
+      graph_locations: [],
+      graph_roadSectorCounters: new Map(),
     };
     this.handleInsertRoadSubmit = this.handleInsertRoadSubmit.bind(this);
     this.handleRoadInputChange = this.handleRoadInputChange.bind(this);
@@ -170,6 +171,7 @@ class CreateMapPage extends Component {
     this.addIntersectionRoad = this.addIntersectionRoad.bind(this);
     this.handleInsertIntersectionSubmit = this.handleInsertIntersectionSubmit.bind(this);
     this.handleDeleteIntersection = this.handleDeleteIntersection.bind(this);
+    this.handleMapSubmit = this.handleMapSubmit.bind(this);
   }
 
   componentDidMount() {
@@ -221,17 +223,6 @@ class CreateMapPage extends Component {
 
     // Clear the currently displayed inputs
     this.clearRoadForm(false);
-
-    // Insert new information into graph output
-    const roadSector = {
-      roadName: newRoad.name, roadSectorId: "1", roadSectorLength: newRoad.weight, startX: newRoad.startX,
-      startY: newRoad.startY, endX: newRoad.endX, endY: newRoad.endY
-    };
-		this.state.graph_roadSectors.push(roadSector);
-		this.state.graph_roadSectorCounters.set(roadSector.roadName, 1);
-    const startIntersection = { x: newRoad.startX, y: newRoad.startY, isEndpoint: true, roadSectors: [roadSector] };
-    const endIntersection = { x: newRoad.endX, y: newRoad.endY, isEndpoint: true, roadSectors: [roadSector] };
-    this.state.graph_intersections.push(startIntersection, endIntersection);
   }
 
   handleInsertLocationSubmit(event) {
@@ -243,7 +234,8 @@ class CreateMapPage extends Component {
       x: Number(this.state.currentLocationX),
       y: Number(this.state.currentLocationY),
       name: this.state.currentLocationName,
-      roadName: this.state.currentLocationRoadName
+      roadName: this.state.currentLocationRoadName,
+      locationId: this.state.currentLocationRoadName + "-" + this.state.currentLocationName
     };
 
     this.state.locations.set(this.state.currentLocationRoadName + "-" + this.state.currentLocationName, newLocation)
@@ -256,8 +248,6 @@ class CreateMapPage extends Component {
 
     // Clear the currently displayed inputs
     this.clearLocationForm();
-
-    // Insert new information into graph output TODO !!!!!
   }
 
   handleInsertIntersectionSubmit(event) {
@@ -275,7 +265,8 @@ class CreateMapPage extends Component {
       x: this.state.currentIntersectionX,
       y: this.state.currentIntersectionY,
       roads: this.state.currentIntersectionRoads,
-      isEndpoint: false
+      isEndpoint: false,
+      locationId: "NOT_A_LOCATION"
     }
 
     this.state.intersections.set(newIntersection.x + "-" + newIntersection.y, newIntersection);
@@ -287,76 +278,29 @@ class CreateMapPage extends Component {
     });
     document.getElementsByName("currentIntersectionX")[0].value = "";
     document.getElementsByName("currentIntersectionY")[0].value = "";
+  }
+  
+  handleMapSubmit(event) {
+    event.preventDefault();
 
-    // For each road part of the intersection, identify the roadSector of that road which is impacted (roadSectorIndex)
-    // Then split that roadSector in half (unless the intersection is an endpoint of the roadSector).
-    const newIntersectionRoadSectors = [];
-    newIntersection.roads.forEach(road => {
-      let roadSectorIndex = -1;
-      this.state.graph_roadSectors.forEach((roadSector, index) => {
-        if (roadSector.roadName === road && this.pointBetweenRoadSector(Number(newIntersection.x), Number(newIntersection.y), 
-          roadSector.startX, roadSector.startY, roadSector.endX, roadSector.endY)) {
-          roadSectorIndex = index; // This is the index of the impacted roadSector on the current road.
-        }
-      })
-
-      // Check whether or not the roadSector should be split (yes by default, no if the intersection is an endpoint of
-      // the roadSector)
-      let roadSectorShouldBeSplit = true;
-      const currentRoadSector = this.state.graph_roadSectors[roadSectorIndex];
-      if ((Number(newIntersection.x) === currentRoadSector.startX && Number(newIntersection.y) === currentRoadSector.startY) ||
-        (Number(newIntersection.x) === currentRoadSector.endX && Number(newIntersection.y) === currentRoadSector.endY)) {
-        // The intersection is an endpoint of this roadSector
-        roadSectorShouldBeSplit = false;
-        newIntersectionRoadSectors.push(currentRoadSector);
-      }
-      
-      if (roadSectorShouldBeSplit) {
-        // Remove the impacted roadSector and replace it with a left half and a right half
-        const oldRoadSector = this.state.graph_roadSectors.splice(roadSectorIndex, 1)[0]; // Removes this roadSector and returns it
-        const splitRoadSectors = this.splitRoadSector(newIntersection, oldRoadSector);
-        const newLeftRoadSector = splitRoadSectors[0];
-        const newRightRoadSector = splitRoadSectors[1];
-        this.state.graph_roadSectorCounters.set(oldRoadSector.roadName, String(parseInt(oldRoadSector.roadSectorId, 10) + 2));
-        this.state.graph_roadSectors.push(newLeftRoadSector, newRightRoadSector);
-        newIntersectionRoadSectors.push(newLeftRoadSector, newRightRoadSector);
-
-        // Update each intersection in graph_intersections to replace the impacted roadSector with the new left and right halves
-        this.state.graph_intersections.forEach(intersection => {
-          intersection.roadSectors.forEach((intersectionRoadSector, index) => {
-            if (intersectionRoadSector.roadName === oldRoadSector.roadName && 
-              intersectionRoadSector.roadSectorId === oldRoadSector.roadSectorId) {
-              if (intersection.x <= Number(newIntersection.x)) { // This roadSector is to the left of the new intersection
-                intersection.roadSectors.splice(index, 1, newLeftRoadSector);
-              } else {  // This roadSector is to the right of the new intersection
-                intersection.roadSectors.splice(index, 1, newRightRoadSector);
-              }
-            }
-          })
-        })
-      }
+    // Add every roadSector to graph_roadSectors and corresponding endpoint intersections to graph_intersections
+    this.state.roads.forEach(road => {
+      this.addRoadSectorToGraph(road);
     })
 
-    // If this intersection already exists, remove it before replacing it.
-    let intersectionIndices = [];
-    for(let i = 0; i < this.state.graph_intersections.length; i++) {
-      const intersection = this.state.graph_intersections[i];
-      if (intersection.x === Number(newIntersection.x) && intersection.y === Number(newIntersection.y)) {
-        intersectionIndices.push(i);
-      }
-    }
-    
-    for(let i = intersectionIndices.length - 1; i >= 0; i--) {
-      this.state.graph_intersections.splice(intersectionIndices[i], 1);
-    }
+    // Add every intersection to graph_intersections
+    this.state.intersections.forEach(intersection => {
+      this.addIntersectionToGraph(intersection);
+    })
 
-    // Add this intersection to graph_intersections
-    this.state.graph_intersections.push( {x: Number(newIntersection.x), y: Number(newIntersection.y), 
-      isEndpoint: false, roadSectors: newIntersectionRoadSectors});
-
-    console.log(this.state.graph_roadSectors);
-    console.log(this.state.graph_intersections);
-	}
+    // Add every location to graph_locations and as an intersection to graph_intersections
+    this.state.locations.forEach(location => {
+      this.addLocationToGraph(location);
+    })
+    console.log(this.state.graph_roadSectors)
+    console.log(this.state.graph_intersections)
+    console.log(this.state.graph_locations)
+  }
 
   handleRoadInputChange(event) {
     const updatedStateObject = {};
@@ -785,6 +729,11 @@ class CreateMapPage extends Component {
           <InsertIntersectionContainer>
             <InsertIntersectionForm>
               <FormTitle>Submit Map</FormTitle>
+              <FormItem>
+                <Button onClick={this.handleMapSubmit}>
+                  Submit
+                </Button>
+              </FormItem>
             </InsertIntersectionForm>
           </InsertIntersectionContainer>
         </InsertionContainer>
@@ -899,6 +848,110 @@ class CreateMapPage extends Component {
 			roadSectorLength: newRightRoadSectorLength};
 
 		return [newLeftRoadSector, newRightRoadSector];
-	}
+  }
+  
+  addRoadSectorToGraph(newRoad) {
+    // Insert new information into graph output
+    const roadSector = {
+      roadName: newRoad.name, roadSectorId: "1", roadSectorLength: newRoad.weight, startX: newRoad.startX,
+      startY: newRoad.startY, endX: newRoad.endX, endY: newRoad.endY
+    };
+    this.state.graph_roadSectors.push(roadSector);
+    this.state.graph_roadSectorCounters.set(roadSector.roadName, 1);
+    const startIntersection = { x: newRoad.startX, y: newRoad.startY, isEndpoint: true, locationId: "NOT_A_LOCATION",
+      roadSectors: [roadSector] };
+    const endIntersection = { x: newRoad.endX, y: newRoad.endY, isEndpoint: true, locationId: "NOT_A_LOCATION", 
+      roadSectors: [roadSector] };
+    this.state.graph_intersections.push(startIntersection, endIntersection);
+  }
+
+  /*********************
+  * 
+  * Submit Map Functions 
+  *
+  *********************/
+
+  addIntersectionToGraph(newIntersection) {
+    // For each road part of the intersection, identify the roadSector of that road which is impacted (roadSectorIndex)
+    // Then split that roadSector in half (unless the intersection is an endpoint of the roadSector).
+    const newIntersectionRoadSectors = [];
+    newIntersection.roads.forEach(road => {
+      let roadSectorIndex = -1;
+      this.state.graph_roadSectors.forEach((roadSector, index) => {
+        if (roadSector.roadName === road && this.pointBetweenRoadSector(Number(newIntersection.x), Number(newIntersection.y), 
+          roadSector.startX, roadSector.startY, roadSector.endX, roadSector.endY)) {
+          roadSectorIndex = index; // This is the index of the impacted roadSector on the current road.
+        }
+      })
+
+      // Check whether or not the roadSector should be split (yes by default, no if the intersection is an endpoint of
+      // the roadSector)
+      let roadSectorShouldBeSplit = true;
+      const currentRoadSector = this.state.graph_roadSectors[roadSectorIndex];
+      if ((Number(newIntersection.x) === currentRoadSector.startX && Number(newIntersection.y) === currentRoadSector.startY) ||
+        (Number(newIntersection.x) === currentRoadSector.endX && Number(newIntersection.y) === currentRoadSector.endY)) {
+        // The intersection is an endpoint of this roadSector
+        roadSectorShouldBeSplit = false;
+        newIntersectionRoadSectors.push(currentRoadSector);
+      }
+      
+      if (roadSectorShouldBeSplit) {
+        // Remove the impacted roadSector and replace it with a left half and a right half
+        const oldRoadSector = this.state.graph_roadSectors.splice(roadSectorIndex, 1)[0]; // Removes this roadSector and returns it
+        const splitRoadSectors = this.splitRoadSector(newIntersection, oldRoadSector);
+        const newLeftRoadSector = splitRoadSectors[0];
+        const newRightRoadSector = splitRoadSectors[1];
+        this.state.graph_roadSectorCounters.set(oldRoadSector.roadName, String(parseInt(oldRoadSector.roadSectorId, 10) + 2));
+        this.state.graph_roadSectors.push(newLeftRoadSector, newRightRoadSector);
+        newIntersectionRoadSectors.push(newLeftRoadSector, newRightRoadSector);
+
+        // Update each intersection in graph_intersections to replace the impacted roadSector with the new left and right halves
+        this.state.graph_intersections.forEach(intersection => {
+          intersection.roadSectors.forEach((intersectionRoadSector, index) => {
+            if (intersectionRoadSector.roadName === oldRoadSector.roadName && 
+              intersectionRoadSector.roadSectorId === oldRoadSector.roadSectorId) {
+              if (intersection.x <= Number(newIntersection.x)) { // This roadSector is to the left of the new intersection
+                intersection.roadSectors.splice(index, 1, newLeftRoadSector);
+              } else {  // This roadSector is to the right of the new intersection
+                intersection.roadSectors.splice(index, 1, newRightRoadSector);
+              }
+            }
+          })
+        })
+      }
+    })
+
+    // If this intersection already exists, remove it before replacing it.
+    let intersectionIndices = [];
+    for(let i = 0; i < this.state.graph_intersections.length; i++) {
+      const intersection = this.state.graph_intersections[i];
+      if (intersection.x === Number(newIntersection.x) && intersection.y === Number(newIntersection.y)) {
+        intersectionIndices.push(i);
+      }
+    }
+    
+    for(let i = intersectionIndices.length - 1; i >= 0; i--) {
+      this.state.graph_intersections.splice(intersectionIndices[i], 1);
+    }
+
+    // Add this intersection to graph_intersections
+    this.state.graph_intersections.push( {x: Number(newIntersection.x), y: Number(newIntersection.y), 
+      isEndpoint: false, locationId: newIntersection.locationId, roadSectors: newIntersectionRoadSectors});
+  }
+
+  addLocationToGraph(location) {
+    // Add this location as an intersection to graph_intersections
+    const locationAsIntersection = {
+      x: location.x.toString(),
+      y: location.y.toString(),
+      roads: [location.roadName],
+      isEndpoint: false,
+      locationId: location.roadName + "-" + location.name
+    }
+    this.addIntersectionToGraph(locationAsIntersection);
+
+    // Add this location to graph_locations
+    this.state.graph_locations.push(location);
+  }
 }
 export default CreateMapPage;
