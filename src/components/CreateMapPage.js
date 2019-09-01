@@ -297,9 +297,13 @@ class CreateMapPage extends Component {
     this.state.locations.forEach(location => {
       this.addLocationToGraph(location);
     })
-    console.log(this.state.graph_roadSectors)
-    console.log(this.state.graph_intersections)
-    console.log(this.state.graph_locations)
+
+    this.props.updateCurrentGraph(this.state.graph_roadSectors, this.state.graph_intersections, this.state.graph_locations);
+    this.props.setComponent("deliveryPage");
+
+    // console.log(this.state.graph_roadSectors)
+    // console.log(this.state.graph_intersections)
+    // console.log(this.state.graph_locations)
   }
 
   handleRoadInputChange(event) {
@@ -838,14 +842,14 @@ class CreateMapPage extends Component {
       (newRightRoadSectorPixelLength / oldRoadSectorPixelLength) * oldRoadSector.roadSectorLength;
 
 		const newLeftRoadSector = {roadName: oldRoadSector.roadName, 
-			roadSectorId: String(parseInt(oldRoadSector.roadSectorId, 10) + 1), startX: newLeftRoadSectorStartX, 
-			startY: newLeftRoadSectorStartY, endX: newLeftRoadSectorEndX, endY: newLeftRoadSectorEndY, 
-			roadSectorLength: newLeftRoadSectorLength};
-
+      roadSectorId: String(parseInt(this.state.graph_roadSectorCounters.get(oldRoadSector.roadName)) + 1), 
+      startX: newLeftRoadSectorStartX, startY: newLeftRoadSectorStartY, endX: newLeftRoadSectorEndX, 
+      endY: newLeftRoadSectorEndY, roadSectorLength: newLeftRoadSectorLength};
+    
 		const newRightRoadSector = {roadName: oldRoadSector.roadName, 
-			roadSectorId: String(parseInt(oldRoadSector.roadSectorId, 10) + 2), startX: newRightRoadSectorStartX, 
-			startY: newRightRoadSectorStartY, endX: newRightRoadSectorEndX, endY: newRightRoadSectorEndY,
-			roadSectorLength: newRightRoadSectorLength};
+      roadSectorId: String(parseInt(this.state.graph_roadSectorCounters.get(oldRoadSector.roadName)) + 2), 
+      startX: newRightRoadSectorStartX, startY: newRightRoadSectorStartY, endX: newRightRoadSectorEndX, 
+      endY: newRightRoadSectorEndY, roadSectorLength: newRightRoadSectorLength};
 
 		return [newLeftRoadSector, newRightRoadSector];
   }
@@ -901,6 +905,7 @@ class CreateMapPage extends Component {
         const splitRoadSectors = this.splitRoadSector(newIntersection, oldRoadSector);
         const newLeftRoadSector = splitRoadSectors[0];
         const newRightRoadSector = splitRoadSectors[1];
+        console.log(oldRoadSector, newLeftRoadSector, newRightRoadSector);
         this.state.graph_roadSectorCounters.set(oldRoadSector.roadName, String(parseInt(oldRoadSector.roadSectorId, 10) + 2));
         this.state.graph_roadSectors.push(newLeftRoadSector, newRightRoadSector);
         newIntersectionRoadSectors.push(newLeftRoadSector, newRightRoadSector);
