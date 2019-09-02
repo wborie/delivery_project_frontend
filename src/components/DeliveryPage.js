@@ -2,6 +2,8 @@ import React, { Component } from 'react';
 
 import styled from 'styled-components';
 
+const API_URL = "http://localhost:4000"
+
 const PageContainer = styled.div`
 	margin: 0 2vw 0 2vw;
 `;
@@ -330,7 +332,11 @@ class DeliveryPage extends Component {
   getNodes() {
     let nodes = [];
     this.state.intersections.forEach(intersection => {
-      nodes.push(String(intersection.x) + "-" + String(intersection.y))
+      if (intersection.locationId === "NOT_A_LOCATION") {
+        nodes.push(String(intersection.x) + "-" + String(intersection.y));
+      } else {
+        nodes.push(intersection.locationId);
+      }
     })
     return nodes;
   }
@@ -339,8 +345,25 @@ class DeliveryPage extends Component {
     let edges = [];
     this.state.roadSectors.forEach(roadSector => {
       let edgeObject = {};
-      edgeObject["start"] = String(roadSector.startX) + "-" + String(roadSector.startY);
-      edgeObject["end"] = String(roadSector.endX) + "-" + String(roadSector.endY);
+
+      // If the start point is a location, use its locationId instead of start point coordinates as the node identifier 
+      let startPointName = this.state.intersections.filter(intersection => {
+        return (intersection.x === roadSector.startX && intersection.y === roadSector.startY && 
+          intersection.locationId !== "NOT_A_LOCATION");
+      })
+      startPointName = (startPointName.length === 0) ? String(roadSector.startX) + "-" + String(roadSector.startY) : 
+        startPointName[0].locationId;
+      edgeObject["start"] = startPointName;
+
+      // If the end point is a location, use its locationId instead of end point coordinates as the node identifier       
+      let endPointName = this.state.intersections.filter(intersection => {
+        return (intersection.x === roadSector.endX && intersection.y === roadSector.endY && 
+          intersection.locationId !== "NOT_A_LOCATION");
+      })
+      endPointName = (endPointName.length === 0) ? String(roadSector.endX) + "-" + String(roadSector.endY) : 
+        endPointName[0].locationId;
+      edgeObject["end"] = endPointName;
+      
       edgeObject["weight"] = roadSector.roadSectorLength;
       edges.push(edgeObject);
     })
@@ -360,7 +383,23 @@ class DeliveryPage extends Component {
   }
 
   async generateRequests(nodes, edges, requests) {
-    console.log('here');
+    const body = {
+      "map": {
+        "nodes": nodes,
+        "edges": edges
+      },
+      "requests": requests
+    }
+    const xhttp = new XMLHttpRequest();
+    xhttp.open("POST", `${API_URL}/getRoutes`, true);
+    xhttp.onreadystatechange = async function () {
+      if (this.readyState === 4 && this.status === 200) {
+        console.log(this.responseText);
+      }
+    }
+    xhttp.setRequestHeader("Content-Type", "application/json");
+    xhttp.send(JSON.stringify(body));
+    console.log(body);
   }
 }
 
