@@ -15,11 +15,17 @@ body {
   font-family: Avenir-Heavy;
 }
 
+@media (max-width: 500px) {
+  .DOP-Page-Title {
+    font-size: 32px;
+    font-family: Avenir-Heavy;
+  }
+}
+
 .DOP-h1 {
   font-size: 60px;
 }
 
 .DOP-h3 {
-  font-size: 36px;
- 
+  font-size: 36px; 
 }

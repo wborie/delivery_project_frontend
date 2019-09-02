@@ -9,10 +9,42 @@ const PageContainer = styled.div`
 const DeliveryContainer = styled.div`
 	margin-bottom: 20px;
 	border-radius: 10px;
-	border-width: 2px;
-	border-color: #18A2B8;
-	border-style: solid;
-	padding: 10px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  border: 2px solid #18A2B8;
+`;
+
+const DeliveryInput = styled.textarea`
+  width: 80vw;
+  height: 30vh
+  color: white;
+  resize: none;
+  border: 2px dashed #18A2B8;
+  border-radius: 15px;
+  background-color: #071729;
+  font-size: 18px;
+  font-family: Avenir;
+  padding: 8px;
+  margin-bottom: 10px;
+  :focus {
+		outline: none;
+	}
+`;
+
+const Button = styled.div`
+	background-color: transparent;
+	color: purple;
+	padding: 5px;
+	border: 2px solid purple;
+	border-radius: 10px;
+	cursor: pointer;
+	:hover {
+		background-color: purple;
+		color: #071729;
+		border-color:	indigo;
+	}
 `;
 
 const MapContainer = styled.div`
@@ -26,7 +58,6 @@ class DeliveryPage extends Component {
 
   constructor(props) {
     super(props);
-    console.log(this.props.current_graph_roadSectors, this.props.current_graph_intersections, this.props.current_graph_locations)
     let highlightedRoadSectors = new Map();
     this.props.current_graph_roadSectors.forEach(roadSector => {
       highlightedRoadSectors.set(roadSector.roadName + "-" + roadSector.roadSectorId, false)
@@ -45,9 +76,12 @@ class DeliveryPage extends Component {
       highlightedLocations: highlightedLocations,
       canvas: null,
       context: null,
-      canvasScale: null
+      canvasScale: null,
+      deliveryString: ""
     };
     this.handleCanvasMouseMove = this.handleCanvasMouseMove.bind(this);
+    this.handleDeliveryChange = this.handleDeliveryChange.bind(this);
+    this.handleDeliverySubmit = this.handleDeliverySubmit.bind(this);
   }
 
   componentDidMount() {
@@ -71,6 +105,55 @@ class DeliveryPage extends Component {
     this.setState({ canvas: canvas, context: context, canvasScale: scale }, () => {
       this.drawCanvas(this.state.canvas, this.state.context, this.state.roadSectors, this.state.locations, this.state.intersections);
     });
+  }
+
+  handleDeliveryChange(event) {
+    event.preventDefault();
+    this.setState({deliveryString: event.target.value})
+  }
+
+  handleDeliverySubmit(event) {
+    event.preventDefault();
+    try {
+      const deliveryObject = JSON.parse(this.state.deliveryString);
+      let deliveryStringIsValid = true;
+      if (!Array.isArray(deliveryObject)) {
+        deliveryStringIsValid = false;
+      }
+      deliveryObject.forEach(object => {
+        if (Object.keys(object).length !== 2) {
+          deliveryStringIsValid = false;
+        }
+        if (object.startLocation === undefined || object.endLocation === undefined) {
+          deliveryStringIsValid = false;
+        }
+        const startLocationExists = this.state.locations.filter(location => {
+          return location.locationId === object.startLocation;
+        })
+        const endLocationExists = this.state.locations.filter(location => {
+          return location.locationId === object.endLocation;
+        })
+        if (startLocationExists.length === 0 || endLocationExists.length === 0) {
+          console.log('failed due to invalid locations', this.state.locations, object.startLocation)
+          deliveryStringIsValid = false;
+        }
+        
+      });
+      
+      if (!deliveryStringIsValid) {
+        console.log('not valid')
+        return;
+      } else {
+        const nodes = this.getNodes();
+        const edges = this.getEdges();
+        const requests = this.getRequests(deliveryObject);
+        this.generateRequests(nodes, edges, requests);
+        console.log(nodes, edges, requests);
+        console.log("Valid!");
+      }
+    } catch(err) {
+      console.log('err');
+    }
   }
 
   handleCanvasMouseMove(event) { // Display roadSector names and location names if the mouse is near those elements
@@ -200,12 +283,15 @@ class DeliveryPage extends Component {
       }
     })
   }
-  
 
 	render() {
+    const deliveryInputPlaceholder = `[ { "startLocation": <locationId>, "endLocation": <locationId> }, ... ]`;
 		return (
       <PageContainer>
-        <DeliveryContainer />
+        <DeliveryContainer>
+          <DeliveryInput name="deliveryInput" placeholder={deliveryInputPlaceholder} onChange={this.handleDeliveryChange}></DeliveryInput>
+          <Button onClick={this.handleDeliverySubmit}>Get Routes</Button>
+        </DeliveryContainer>
 			  <MapContainer>
           <canvas
             ref="canvas"
@@ -239,6 +325,42 @@ class DeliveryPage extends Component {
       }
     }
     return false;
+  }
+
+  getNodes() {
+    let nodes = [];
+    this.state.intersections.forEach(intersection => {
+      nodes.push(String(intersection.x) + "-" + String(intersection.y))
+    })
+    return nodes;
+  }
+
+  getEdges() {
+    let edges = [];
+    this.state.roadSectors.forEach(roadSector => {
+      let edgeObject = {};
+      edgeObject["start"] = String(roadSector.startX) + "-" + String(roadSector.startY);
+      edgeObject["end"] = String(roadSector.endX) + "-" + String(roadSector.endY);
+      edgeObject["weight"] = roadSector.roadSectorLength;
+      edges.push(edgeObject);
+    })
+    return edges;
+  }
+
+  getRequests(inputRequests) {
+    let requests = [];
+    inputRequests.forEach((inputRequest, index) => {
+      let requestObject = {};
+      requestObject["start"] = inputRequest.startLocation;
+      requestObject["end"] = inputRequest.endLocation;
+      requestObject["id"] = String(index);
+      requests.push(requestObject);
+    })
+    return requests;
+  }
+
+  async generateRequests(nodes, edges, requests) {
+    console.log('here');
   }
 }
 
