@@ -149,8 +149,9 @@ class DeliveryPage extends Component {
         const nodes = this.getNodes();
         const edges = this.getEdges();
         const requests = this.getRequests(deliveryObject);
-        this.generateRequests(nodes, edges, requests);
-        console.log(nodes, edges, requests);
+        // this.generateRequests(nodes, edges, requests);
+        this.getRoutes(nodes, edges, requests);
+        // let result = this.makeRequest(nodes, edges, requests);
         console.log("Valid!");
       }
     } catch(err) {
@@ -382,24 +383,42 @@ class DeliveryPage extends Component {
     return requests;
   }
 
-  async generateRequests(nodes, edges, requests) {
+  async getRoutes(nodes, edges, requests) {
+    let result = await this.makeRequest(nodes, edges, requests);
+    console.log(result);
+  }
+
+  async makeRequest(nodes, edges, requests) {
     const body = {
       "map": {
         "nodes": nodes,
         "edges": edges
       },
       "requests": requests
-    }
-    const xhttp = new XMLHttpRequest();
-    xhttp.open("POST", `${API_URL}/getRoutes`, true);
-    xhttp.onreadystatechange = async function () {
-      if (this.readyState === 4 && this.status === 200) {
-        console.log(this.responseText);
+    };
+
+    return new Promise((resolve, reject) => {
+      const xhttp = new XMLHttpRequest();
+      xhttp.open("POST", `${API_URL}/getRoutes`, true);
+      xhttp.onload = function () {
+        if (this.status === 200) {
+          resolve(xhttp.response);
+        } else {
+          reject({
+            status: this.status,
+            statusText: this.statusText
+          })
+        }
       }
-    }
-    xhttp.setRequestHeader("Content-Type", "application/json");
-    xhttp.send(JSON.stringify(body));
-    console.log(body);
+      xhttp.onerror = function () {
+        reject({
+            status: this.status,
+            statusText: xhttp.statusText
+        });
+      };
+      xhttp.setRequestHeader("Content-Type", "application/json");
+      xhttp.send(JSON.stringify(body));
+    })
   }
 }
 

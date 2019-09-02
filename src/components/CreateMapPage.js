@@ -905,7 +905,6 @@ class CreateMapPage extends Component {
         const splitRoadSectors = this.splitRoadSector(newIntersection, oldRoadSector);
         const newLeftRoadSector = splitRoadSectors[0];
         const newRightRoadSector = splitRoadSectors[1];
-        console.log(oldRoadSector, newLeftRoadSector, newRightRoadSector);
         this.state.graph_roadSectorCounters.set(oldRoadSector.roadName, String(parseInt(oldRoadSector.roadSectorId, 10) + 2));
         this.state.graph_roadSectors.push(newLeftRoadSector, newRightRoadSector);
         newIntersectionRoadSectors.push(newLeftRoadSector, newRightRoadSector);
