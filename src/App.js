@@ -46,7 +46,10 @@ class App extends Component {
         MainContent = <CreateMapFromImagePage />;
         break;
       case "selectMapPage":
-        MainContent = <SelectMapPage />;
+        MainContent = <SelectMapPage 
+          updateCurrentGraph={this.updateCurrentGraph.bind(this)} 
+          setComponent={this.setComponent.bind(this)}
+        />;
         break;
       case "deliveryPage":
         MainContent = <DeliveryPage 
